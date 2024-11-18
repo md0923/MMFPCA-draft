@@ -5,8 +5,6 @@
 - mmfpca_tutorial.R:
 - eigenfunction_construction.R:
 - simulation_data_generation.R:
-- preparation_functions.R:
-- mufpca_centered.R:
 - mmfpca.R:
 
 ## Introduction
