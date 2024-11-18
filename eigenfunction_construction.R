@@ -1,7 +1,7 @@
 ###########################################################################################
-## Description: Functions for generating multilevel multi- and uni-variate two-dimensional 
+## Description: Functions for constructing multilevel multi- and uni-variate two-dimensional 
 ##              eigenfunctions described in the simulation section of 'Joint Modeling of 
-##              Evoked and Induced Event-Related Spectral Perturbations Supplementary Materials'.
+##              Evoked and Induced Event-Related Spectral Perturbations'.
 ###########################################################################################
 ## Functions included:
 ## Main function:
