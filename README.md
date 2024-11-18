@@ -3,7 +3,11 @@
 ## Contents of this folder
 
 - mmfpca_tutorial.R:
-
+- eigenfunction_construction.R:
+- simulation_data_generation.R:
+- preparation_functions.R:
+- mufpca.R:
+- mmfpca.R:
 
 ## Introduction
 
