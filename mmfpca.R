@@ -1,131 +1,199 @@
-require(Matrix)
-require(MASS)
-require(splines)
+###########################################################################################
+## Description: Functions for fitting multilevel multivariate FPCA via estimation algorithm
+##              described in 'Joint Modeling of Evoked and Induced Event-Related Spectral 
+##              Perturbations.'
+###########################################################################################
+## Functions included:
+## Main function:
+##    1. mmfpca: Function that fits multilevel multivariate FPCA utilizing model components 
+##               from multilevel univariate FPCA
+## Supporting functions used by main function:
+##    1. mfpca.face_center: Function that fits multilevel univariate FPCA using fast covariance
+##                          estimation (FACE) method (Cui et al. 2023)
+##                          * this function is modified from the 'mfpca.face' function from the 
+##                            'refund' package
+##                          * the overall mean function for the univariate functional data is the
+##                            extra required input parameter different from the original version
+###########################################################################################
+
 
 mmfpca = function(
-    z_var1,
-    z_var2,
-    id_var1,
-    id_var2,
-    x1, y1, x2, y2, # the axises of two dimensionals within each variate
-    mufpca_pve = 0.99, # percentage of variance explained threshold for fitting 
-    pred_pve){ # percentage of variance explained threshold for prediction
-  # estimate the overall mean
+    z_var1,                 # multilevel functional data from variate 1 (matrix of dimension M*R_sum)
+    z_var2,                 # multilevel functional data from variate 2 (matrix of dimension M*R_sum)
+    id_var,                 # id information for each trial to identify the subject it belong to (array of length R_sum)
+    x_axis,                 # x axis of the two-dimensional functional domain (array of length M_x)
+    y_axis,                 # y axis of the two-dimensional functional domain (array of length M_y)
+    mufpca_pve,             # percentage of variance explained threshold for multilevel univaraite FPCA (scalar < 1)
+    mmfpca_pve){            # percentage of variance explained threshold for multilevel multivariate FPCA (scalar < 1)
+  
+  #########################################################################################
+  ## Description: Function that fits multilevel multivariate FPCA utilizing model components
+  ##              from multilevel univariate FPCA.
+  ## Definition:  M_x: number of sampling points on the x-axis of the two-dimensional functional domain
+  ##              M_y: number of sampling points on the y-axis of the two-dimensional functional domain
+  ##              M = M_x * M_y: total number of sampling points on the two-dimensional functional domain
+  ##              N: number of subjects
+  ##              R_sum: total number of trials
+  ## Args:        see above
+  ## Returns:     a list of structure containing
+  ##              z_data: the original multilevel multivariate functional data
+  ##              uni: list of estimated multilevel univariate eigencomponents and the corresponding data reconstruction
+  ##              multi: list of estimated multilevel multivariate eigencomponents and the corresponding data reconstruction
+  #########################################################################################  
+  
+  N = length(unique(id_array))                         # number of subjects
+  R_list = array(dim = N)                              # number of trials for each subject
+  for (i in 1:N){
+    R_list[i] = sum(as.numeric(id_array == i))
+  }
+  R_sum = length(id_array).                            # total number of trials
+  M = dim(z_var1)[,2]                                  # total number of sampling points
+  
+  # estimate the two-dimensional mean function using the bivariate thin plat spline smoother
   z_var1_mean = apply(z_var1, 2, mean)
-  var1_mean_dt = data.frame(x1 = rep(x1, each = length(y1)),
-                            y1 = rep(y1, length(x1)),
+  var1_mean_dt = data.frame(x_axis = rep(x_axis, each = length(y_axis)),
+                            y_axis = rep(y_axis, length(x_axis)),
                             z_mean = c(z_var1_mean))
-  var1_mu_fit = as.vector(predict(gam(z_mean ~ s(x1, y1), data = var1_mean_dt), 
-                                  newdata = data.frame(x1 = rep(x1, each = length(y1)),
-                                                       y1 = rep(y1, length(x1)))))
+  var1_mu_fit = as.vector(predict(gam(z_mean ~ s(x_axis, y_axis), data = var1_mean_dt), 
+                                  newdata = data.frame(x_axis = rep(x_axis, each = length(y_axis)),
+                                                       y_axis = rep(y_axis, length(x_axis)))))
   z_var2_mean = apply(z_var2, 2, mean)
-  var2_mean_dt = data.frame(x2 = rep(x2, each = length(y2)),
-                            y2 = rep(y2, length(x2)),
+  var2_mean_dt = data.frame(x_axis = rep(x_axis, each = length(y_axis)),
+                            y_axis = rep(y_axis, length(x_axis)),
                             z_mean = c(z_var2_mean))
-  var2_mu_fit = as.vector(predict(gam(z_mean ~ s(x2, y2), data = var2_mean_dt), 
-                                  newdata = data.frame(x2 = rep(x2, each = length(y2)),
-                                                       y2 = rep(y2, length(x2)))))
-  z_uni_pred_var1 = z_multi_pred_var1 = z_var1
-  z_uni_pred_var2 = z_multi_pred_var2 = z_var2
+  var2_mu_fit = as.vector(predict(gam(z_mean ~ s(x_axis, y_axis), data = var2_mean_dt), 
+                                  newdata = data.frame(x_axis = rep(x_axis, each = length(y_axis)),
+                                                       y_axis = rep(y_axis, length(x_axis)))))
+  
+  
+  
   # fit multilevel univariate FPCA for each single variates
-  mod_var1 = mfpca.face_center(Y = z_var1,
-                               id = rep(1:N, each = R),
-                               argvals = c(1:n_obs_1),
-                               twoway = FALSE,
-                               p = 4,
-                               pve = mufpca_pve,
-                               knots = floor(n_obs_1/5),
-                               mu = var1_mu_fit)
-  mod_var2 = mfpca.face_center(Y = z_var2,
-                               id = rep(1:N, each = R),
-                               argvals = c(1:n_obs_2),
-                               twoway = FALSE,
-                               p = 4,
-                               pve = mufpca_pve,
-                               knots = floor(n_obs_2/5),
-                               mu = var2_mu_fit)
+  mod_var1 = mfpca.face_center(Y = z_var1,                          # multilevel univariate functional outcome (var1)
+                               id = id_var,                         # subject information for each trial
+                               argvals = c(1:M),                    # sampling grids on the two-dimensional functional domain
+                               p = 4,                               # degree of b-splines used in FACE algorithm
+                               pve = mufpca_pve,                    # percentage of variation explained (pve) threshold for multilevel univariate FPCA 
+                                                                    #     (used to determine number of eigencomponents retains at both levels)
+                               knots = floor(M/5),                  # number of knots to use for b-splines
+                               mu = var1_mu_fit)                    # estimated univariate mean function (var1)
+  
+  mod_var2 = mfpca.face_center(Y = z_var2,                          # multilevel univariate functional outcome (var2)
+                               id = id_var,                         # subject information for each trial
+                               argvals = c(1:M),                    # sampling grids on the two-dimensional functional domain
+                               p = 4,                               # degree of b-splines used in FACE algorithm
+                               pve = mufpca_pve,                    # pve threshold for multilevel univariate FPCA (both levels)
+                                                                    #     (used to determine number of eigencomponents retains at both levels)
+                               knots = floor(M/5),                  # number of knots to use for b-splines
+                               mu = var2_mu_fit)                    # estimated univariate mean function (var2)
+  
   # calculate the multivariate eigen components using univariate eigenscores
+  # number of univariate eigencomponents at each level for each variate
   m1_lvl1 = mod_var1$npc$level1
   m1_lvl2 = mod_var1$npc$level2
   m2_lvl1 = mod_var2$npc$level1
   m2_lvl2 = mod_var2$npc$level2
   m_sum_lvl1 = m1_lvl1 + m2_lvl1
   m_sum_lvl2 = m1_lvl2 + m2_lvl2
-  # subject-level multivariate eigen components
+  
+  # subject-level multivaraite eigencomponents
+  ## subject-level univariate eigenscore matrix
   joint_score_lvl1 = cbind(mod_var1$scores$level1[,1:m1_lvl1],
                            mod_var2$scores$level1[,1:m2_lvl1])
+  ## subject-level eigenscore covariance matrix
   Z_joint_lvl1 = t(joint_score_lvl1) %*% joint_score_lvl1 / (N-1)
+  ## eigen decomposition of subject-level eigenscore covariance matrix
   Z_joint_lvl1.eigen = eigen(Z_joint_lvl1)
+  ## subject-level multivariate eigenvalues
   evalue_lvl1_multi_est = Z_joint_lvl1.eigen$values
+  ## subject-level multivariate eigenfunctions
   eigen_lvl1_var1_multi_est = mod_var1$efunctions$level1[,1:m1_lvl1] %*%
     Z_joint_lvl1.eigen$vectors[1:m1_lvl1, ]
   eigen_lvl1_var2_multi_est = mod_var2$efunctions$level1[,1:m2_lvl1] %*%
     Z_joint_lvl1.eigen$vectors[c(m1_lvl1 + 1:m2_lvl1), ]
+  ## subject-level (shared) multivariate eigenscores
   score_lvl1_multi_est = mod_var1$scores$level1[,1:m1_lvl1] %*%
     Z_joint_lvl1.eigen$vectors[1:m1_lvl1, ] +
     mod_var2$scores$level1[,1:m2_lvl1] %*%
     Z_joint_lvl1.eigen$vectors[c(m1_lvl1 + 1:m2_lvl1), ]
-  # trial-level multivariate eigen components
+  
+  # trial-level multivariate eigencomponents
+  ## trial-level univariate eigenscore matrix
   joint_score_lvl2 = cbind(mod_var1$scores$level2[,1:m1_lvl2],
                            mod_var2$scores$level2[,1:m2_lvl2])
-  Z_joint_lvl2 = t(joint_score_lvl2) %*% joint_score_lvl2 / (N*R-1)
+  ## trial-level eigenscore covariance matrix
+  Z_joint_lvl2 = t(joint_score_lvl2) %*% joint_score_lvl2 / (R_sum-1)
+  ## eigen decomposition of trial-level eigenscore covariance matrix
   Z_joint_lvl2.eigen = eigen(Z_joint_lvl2)
+  ## trial-level multivariate eigenvalues
   evalue_lvl2_multi_est = Z_joint_lvl2.eigen$values
+  ## trial-level multivariate eigenfunctions
   eigen_lvl2_var1_multi_est = mod_var1$efunctions$level2[,1:m1_lvl2] %*%
     Z_joint_lvl2.eigen$vectors[1:m1_lvl2, ]
   eigen_lvl2_var2_multi_est = mod_var2$efunctions$level2[,1:m2_lvl2] %*%
     Z_joint_lvl2.eigen$vectors[c(m1_lvl2 + 1:m2_lvl2), ]
+  ## trial-level multivariate eigenscores
   score_lvl2_multi_est = mod_var1$scores$level2[,1:m1_lvl2] %*%
     Z_joint_lvl2.eigen$vectors[1:m1_lvl2, ] +
     mod_var2$scores$level2[,1:m2_lvl2] %*%
     Z_joint_lvl2.eigen$vectors[c(m1_lvl2 + 1:m2_lvl2), ]
-  # make prediction using univariate MFPCA results
-  m_uni_pred_lvl1_var1 = min(which(mufpca_pve*cumsum(mod_var1$evalues$level1)/sum(mod_var1$evalues$level1) >= pred_pve))
-  m_uni_pred_lvl1_var2 = min(which(mufpca_pve*cumsum(mod_var2$evalues$level1)/sum(mod_var2$evalues$level1) >= pred_pve))
-  m_uni_pred_lvl2_var1 = min(which(mufpca_pve*cumsum(mod_var1$evalues$level2)/sum(mod_var1$evalues$level2) >= pred_pve))
-  m_uni_pred_lvl2_var2 = min(which(mufpca_pve*cumsum(mod_var2$evalues$level2)/sum(mod_var2$evalues$level2) >= pred_pve))
-  # make prediction using multivariate MFPCA results
-  m_multi_pred_lvl1 = min(which(mufpca_pve*cumsum(evalue_lvl1_multi_est)/sum(evalue_lvl1_multi_est) >= pred_pve))
-  m_multi_pred_lvl2 = min(which(mufpca_pve*cumsum(evalue_lvl2_multi_est)/sum(evalue_lvl2_multi_est) >= pred_pve))
-  # run only one loop to save time
+  
+  # retain a finite number of multivariate eigencomponents based on the pve criteria
+  m_multi_pred_lvl1 = min(which(mufpca_pve*cumsum(evalue_lvl1_multi_est)/sum(evalue_lvl1_multi_est) >= mmfpca_pve))
+  m_multi_pred_lvl2 = min(which(mufpca_pve*cumsum(evalue_lvl2_multi_est)/sum(evalue_lvl2_multi_est) >= mmfpca_pve))
+  # retain a finite number of univariate eigencomponents based on the same pve criteria set for multilevel multivariate FPCA
+  m_uni_pred_lvl1_var1 = min(which(mufpca_pve*cumsum(mod_var1$evalues$level1)/sum(mod_var1$evalues$level1) >= mmfpca_pve))
+  m_uni_pred_lvl1_var2 = min(which(mufpca_pve*cumsum(mod_var2$evalues$level1)/sum(mod_var2$evalues$level1) >= mmfpca_pve))
+  m_uni_pred_lvl2_var1 = min(which(mufpca_pve*cumsum(mod_var1$evalues$level2)/sum(mod_var1$evalues$level2) >= mmfpca_pve))
+  m_uni_pred_lvl2_var2 = min(which(mufpca_pve*cumsum(mod_var2$evalues$level2)/sum(mod_var2$evalues$level2) >= mmfpca_pve))
+  
+  # prediction: reconstruct the multilevel multivariate two-dimensional functional data via K-L expansion with estimated eigencomponents
+  z_uni_pred_var1 = z_multi_pred_var1 = matrix(nrow = M, ncol = R_sum)
+  z_uni_pred_var2 = z_multi_pred_var2 = matrix(nrow = M, ncol = R_sum)
   for (i in 1:N){
-    for (r in 1:R){
-      index = R*(i-1) + r
-      # univariate MFPCA
-      z_uni_pred_var1[index,] = mod_var1$mu + 
+    if (i == 1){
+      start = 1
+    }elst{
+      start = sum(1:R_list[i-1])
+    }
+    for (r in 1:R_list[i]){
+      index = start + r
+      # prediction using multilevel univariate FPCA
+      z_uni_pred_var1[index,] = mod_var1$mu +                           # estimated mean function
         mod_var1$scores$level1[i,c(1:m_uni_pred_lvl1_var1)] %*%
-        t(mod_var1$efunctions$level1[,c(1:m_uni_pred_lvl1_var1)]) +
+        t(mod_var1$efunctions$level1[,c(1:m_uni_pred_lvl1_var1)]) +     # estimated subject-specific deviation from mean
         mod_var1$scores$level2[index,c(1:m_uni_pred_lvl2_var1)] %*% 
-        t(mod_var1$efunctions$level2[,c(1:m_uni_pred_lvl2_var1)])
-      z_uni_pred_var2[index,] = mod_var2$mu + 
+        t(mod_var1$efunctions$level2[,c(1:m_uni_pred_lvl2_var1)])       # estimated trial-specific deviation from subject mean
+      z_uni_pred_var2[index,] = mod_var2$mu +                           # estimated mean function 
         mod_var2$scores$level1[i,c(1:m_uni_pred_lvl1_var2)] %*% 
-        t(mod_var2$efunctions$level1[,c(1:m_uni_pred_lvl1_var2)]) +
+        t(mod_var2$efunctions$level1[,c(1:m_uni_pred_lvl1_var2)]) +     # estimated subject-specific deviation from mean
         mod_var2$scores$level2[index,c(1:m_uni_pred_lvl2_var2)] %*% 
-        t(mod_var2$efunctions$level2[,c(1:m_uni_pred_lvl2_var2)])
-      # multivariate MFPCA
-      z_multi_pred_var1[index,] = mod_var1$mu +
+        t(mod_var2$efunctions$level2[,c(1:m_uni_pred_lvl2_var2)])       # estimated trial-specific deviation from subject mean
+      
+      # prediction using multilevel multivariate MFPCA
+      z_multi_pred_var1[index,] = mod_var1$mu +                         # estimated mean function
         score_lvl1_multi_est[i, c(1:m_multi_pred_lvl1)] %*% 
-        t(eigen_lvl1_var1_multi_est[,c(1:m_multi_pred_lvl1)]) +
+        t(eigen_lvl1_var1_multi_est[,c(1:m_multi_pred_lvl1)]) +         # estimated subject-specific deviation from mean
         score_lvl2_multi_est[index, c(1:m_multi_pred_lvl2)] %*%
-        t(eigen_lvl2_var1_multi_est[,c(1:m_multi_pred_lvl2)])
-      z_multi_pred_var2[index,] = mod_var2$mu +
+        t(eigen_lvl2_var1_multi_est[,c(1:m_multi_pred_lvl2)])           # estimated trial-specific deviation from subject mean
+      z_multi_pred_var2[index,] = mod_var2$mu +                         # estimated mean function
         score_lvl1_multi_est[i, c(1:m_multi_pred_lvl1)] %*% 
-        t(eigen_lvl1_var2_multi_est[,c(1:m_multi_pred_lvl1)]) +
+        t(eigen_lvl1_var2_multi_est[,c(1:m_multi_pred_lvl1)]) +         # estimated subject-specific deviation from mean
         score_lvl2_multi_est[index, c(1:m_multi_pred_lvl2)] %*%
-        t(eigen_lvl2_var2_multi_est[,c(1:m_multi_pred_lvl2)])
+        t(eigen_lvl2_var2_multi_est[,c(1:m_multi_pred_lvl2)])           # estimated trial-specific deviation from subject mean
     }
   }
   
+  # store results into a list structure
   z_data = list(z_var1 = z_var1,
                 z_var2 = z_var2)
-  uni = list(eigen_lvl1_var1_uni_est = mod_var1$efunctions$level1[,1:m_uni_pred_lvl1_var1]/sqrt(2),
-             eigen_lvl1_var2_uni_est = mod_var2$efunctions$level1[,1:m_uni_pred_lvl1_var2]/sqrt(2),
-             eigen_lvl2_var1_uni_est = mod_var1$efunctions$level2[,1:m_uni_pred_lvl2_var1]/sqrt(2),
-             eigen_lvl2_var2_uni_est = mod_var2$efunctions$level2[,1:m_uni_pred_lvl2_var2]/sqrt(2),
-             evalue_lvl1_var1_uni_est = mod_var1$evalues$level1[1:m_uni_pred_lvl1_var1]*2,
-             evalue_lvl1_var2_uni_est = mod_var2$evalues$level1[1:m_uni_pred_lvl1_var2]*2,
-             evalue_lvl2_var1_uni_est = mod_var1$evalues$level2[1:m_uni_pred_lvl2_var1]*2,
-             evalue_lvl2_var2_uni_est = mod_var2$evalues$level2[1:m_uni_pred_lvl2_var2]*2,
+  uni = list(eigen_lvl1_var1_uni_est = mod_var1$efunctions$level1[,1:m_uni_pred_lvl1_var1],
+             eigen_lvl1_var2_uni_est = mod_var2$efunctions$level1[,1:m_uni_pred_lvl1_var2],
+             eigen_lvl2_var1_uni_est = mod_var1$efunctions$level2[,1:m_uni_pred_lvl2_var1],
+             eigen_lvl2_var2_uni_est = mod_var2$efunctions$level2[,1:m_uni_pred_lvl2_var2],
+             evalue_lvl1_var1_uni_est = mod_var1$evalues$level1[1:m_uni_pred_lvl1_var1],
+             evalue_lvl1_var2_uni_est = mod_var2$evalues$level1[1:m_uni_pred_lvl1_var2],
+             evalue_lvl2_var1_uni_est = mod_var1$evalues$level2[1:m_uni_pred_lvl2_var1],
+             evalue_lvl2_var2_uni_est = mod_var2$evalues$level2[1:m_uni_pred_lvl2_var2],
              fve_lvl1_var1_uni_est = mufpca_pve*mod_var1$evalues$level1[1:m_uni_pred_lvl1_var1]/
                sum(mod_var1$evalues$level1),
              fve_lvl1_var2_uni_est = mufpca_pve*mod_var2$evalues$level1[1:m_uni_pred_lvl1_var2]/
@@ -136,10 +204,10 @@ mmfpca = function(
                sum(mod_var2$evalues$level2),
              z_mu_var1_uni_est = mod_var1$mu,
              z_mu_var2_uni_est = mod_var2$mu,
-             # score_lvl1_var1_uni_est = mod_var1$scores$level1,
-             # score_lvl1_var2_uni_est = mod_var2$scores$level1,
-             # score_lvl2_var1_uni_est = mod_var1$scores$level2,
-             # score_lvl3_var2_uni_est = mod_var2$scores$level2,
+             score_lvl1_var1_uni_est = mod_var1$scores$level1,
+             score_lvl1_var2_uni_est = mod_var2$scores$level1,
+             score_lvl2_var1_uni_est = mod_var1$scores$level2,
+             score_lvl3_var2_uni_est = mod_var2$scores$level2,
              z_uni_pred_var1 = z_uni_pred_var1,
              z_uni_pred_var2 = z_uni_pred_var2,
              sigma2_e_var1 = mod_var1$sigma2,
@@ -154,24 +222,28 @@ mmfpca = function(
                  sum(evalue_lvl1_multi_est),
                fve_lvl2_multi_est = mufpca_pve*evalue_lvl2_multi_est[1:m_multi_pred_lvl2]/
                  sum(evalue_lvl2_multi_est),
-               # score_lvl1_multi_est = score_lvl1_multi_est,
-               # score_lvl2_multi_est = score_lvl2_multi_est,
+               score_lvl1_multi_est = score_lvl1_multi_est,
+               score_lvl2_multi_est = score_lvl2_multi_est,
                z_multi_pred_var1 = z_multi_pred_var1,
                z_multi_pred_var2 = z_multi_pred_var2)
   result = list(z_data = z_data,
                 uni = uni,
                 multi = multi)
-  
   return(result)
 }
 
 
 
 
-mfpca.face_center = function (Y, id, visit = NULL, twoway = TRUE, weight = "obs", 
+
+mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs", 
                               argvals = NULL, pve = 0.99, npc = NULL, p = 3, m = 2, knots = 35, 
-                              silent = TRUE, mu) 
+                              silent = TRUE, 
+                              mu)           
 {
+  
+  
+  
   pspline.setting.mfpca <- function(x, knots = 35, p = 3, 
                                     m = 2, weight = NULL, type = "full", knots.option = "equally-spaced") {
     K = length(knots) - 2 * p - 1
@@ -533,147 +605,4 @@ mfpca.face_center = function (Y, id, visit = NULL, twoway = TRUE, weight = "obs"
      Xhat, Xhat.subject, argvals, diag_Gt, I, ID, J, mu, 
      pve, L, sigma2)
   return(res)
-}
-
-
-
-
-## The function implements the face algorithm 
-face.Cov.mfpca <- function(Y, argvals, A0, B, Anew, Bnew, G_invhalf, s, Cov=FALSE, pve=0.99, npc=NULL, lambda=NULL, alpha=0.7, 
-                           search.grid=TRUE, search.length=100, lower=-20, upper=20){
-  
-  ######## precalculation for missing data ########
-  imputation <- FALSE
-  Niter.miss <- 1
-  L <- ncol(Y)
-  n <- nrow(Y)
-  
-  Index.miss <- is.na(Y)
-  if(sum(Index.miss)>0){
-    num.miss <- rowSums(is.na(Y))
-    for(i in 1:n){
-      if(num.miss[i]>0){
-        y <- Y[i,]
-        seq <- (1:L)[!is.na(y)]
-        seq2 <-(1:L)[is.na(y)]
-        t1 <- argvals[seq]
-        t2 <- argvals[seq2]
-        fit <- smooth.spline(t1,y[seq])
-        temp <- predict(fit,t2,all.knots=TRUE)$y
-        if(max(t2)>max(t1)) temp[t2>max(t1)] <- mean(y[seq])
-        if(min(t2)<min(t1)) temp[t2<min(t1)] <- mean(y[seq])
-        Y[i,seq2] <- temp
-      }
-    }
-    imputation <- TRUE
-    Niter.miss <- 100
-  }
-  convergence.vector <- rep(0,Niter.miss)
-  iter.miss <- 1
-  lambda.input <- lambda
-  totalmiss <- mean(Index.miss)
-  
-  
-  while(iter.miss <= Niter.miss&&convergence.vector[iter.miss]==0) {
-    ###################################################
-    ######## Transform the Data           #############
-    ###################################################
-    Ytilde <- t(as.matrix(Y%*%B) %*% A0)
-    C_diag <- rowSums(Ytilde^2)
-    
-    ###################################################
-    ########  Select Smoothing Parameters #############
-    ###################################################
-    Y_square <- sum(Y^2)
-    Ytilde_square <- sum(Ytilde^2)
-    face_gcv <- function(x) {
-      lambda <- exp(x)
-      lambda_s <- (lambda*s)^2/(1 + lambda*s)^2
-      gcv <- sum(C_diag*lambda_s) - Ytilde_square + Y_square
-      trace <- sum(1/(1+lambda*s))
-      gcv <- gcv/(1-alpha*trace/L/(1-totalmiss))^2
-      return(gcv)
-    }
-    
-    
-    if(is.null(lambda.input) && iter.miss<=2) {
-      if(!search.grid){
-        fit <- optim(0,face_gcv,lower=lower,upper=upper)
-        if(fit$convergence>0) {
-          expression <- paste("Smoothing failed! The code is:",fit$convergence)
-          print(expression)
-        }
-        lambda <- exp(fit$par)
-      } else {
-        Lambda <- seq(lower,upper,length=search.length)
-        Length <- length(Lambda)
-        Gcv <- rep(0,Length)
-        for(i in 1:Length)
-          Gcv[i] <- face_gcv(Lambda[i])
-        i0 <- which.min(Gcv)
-        lambda <- exp(Lambda[i0])
-      }
-    }
-    YS <- matrix.multiply.mfpca(Ytilde,1/(1+lambda*s),2)
-    
-    ###################################################
-    ####  Eigendecomposition of Smoothed Data #########
-    ###################################################
-    temp0 <- YS%*%t(YS)/n
-    temp <- as.matrix(Anew%*%as.matrix(temp0%*%t(Anew)))
-    Eigen <- eigen(temp,symmetric=TRUE)
-    A = Eigen$vectors
-    Phi = Bnew %*% A
-    Sigma = Eigen$values
-    
-    if(iter.miss>1&&iter.miss< Niter.miss) {
-      diff <- norm(YS-YS.temp,"F")/norm(YS,"F")
-      if(diff <= 0.02)
-        convergence.vector[iter.miss+1] <- 1
-    }
-    
-    YS.temp <- YS
-    iter.miss <- iter.miss + 1
-    N <- min(n, ncol(B))
-    d <- Sigma[1:N]
-    d <- d[d>0]
-    per <- cumsum(d)/sum(d)
-    N <- ifelse (is.null(npc), min(which(per>pve)), min(npc, length(d)))
-    
-    #########################################
-    #######     Principal  Scores   #########
-    ########   data imputation      #########
-    #########################################
-    if(imputation) {
-      Phi.N <- Phi[,1:N, drop = FALSE]
-      A.N <- G_invhalf %*% A[,1:N]
-      d <- Sigma[1:N]
-      sigmahat2  <-  max(mean(Y[!Index.miss]^2) -sum(Sigma),0)
-      if(N>1){
-        Xi <- solve(t(Phi.N)%*%Phi.N + diag(sigmahat2/d)) %*% t(as.matrix(Y%*%B) %*% A.N)
-      } else{
-        Xi <- solve(t(Phi.N)%*%Phi.N + sigmahat2/d) %*% t(as.matrix(Y%*%B) %*% A.N)
-      }
-      Yhat <- t(Phi.N %*% Xi)
-      Y <- Y*(1-Index.miss) + Yhat*Index.miss
-      if(sum(is.na(Y))>0) print("error")
-    }
-    
-  } ## end of while loop
-  
-  Phi.N <- Phi[,1:N, drop = FALSE]
-  evalues <- Sigma[1:N]
-  Ktilde <- NULL
-  if(Cov) {
-    Ktilde <- Phi.N %*%  matrix.multiply.mfpca(t(Phi.N),evalues,2)
-  }
-  
-  return(list(Yhat=Y, decom=temp, Ktilde=Ktilde, evalues=evalues, efunctions=Phi.N))
-}
-
-matrix.multiply.mfpca <- function(A,s,option=1){
-  if(option==2)
-    return(A*(s%*%t(rep(1,dim(A)[2]))))
-  if(option==1)
-    return(A*(rep(1,dim(A)[1])%*%t(s)))
 }
