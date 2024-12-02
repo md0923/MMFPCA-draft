@@ -236,12 +236,45 @@ mmfpca = function(
 
 
 
-mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs", 
-                              argvals = NULL, pve = 0.99, npc = NULL, p = 3, m = 2, knots = 35, 
-                              silent = TRUE, 
-                              mu)           
+mfpca.face_center = function (Y,                    # multilevel univariate functional data (matrix of dimension M*R_sum)       
+                              id,                   # id information for each trial to identify the subject it belong to (array of length R_sum)    
+                              argvals = NULL,       # sampling grids on the two-dimensional functional domain
+                              pve = 0.99,           # pve threshold for multilevel univairate FPCA
+                                                    #     (used to determine number of eigencomponents retained at both levels)
+                              p = 3,                # degree of freedom of b-splines used in FACE algorithm
+                              knots = 35,           # number of knots to use for b-splines
+                              mu,
+                              #####################################################################
+                              ## arguments below and their default values are retianed from the
+                              ## original 'mfpca.face' function from the 'refund' package
+                              ## see '?refund::mfpca.face' for details on explanation of the arguments
+                              #####################################################################
+                              visit = NULL, 
+                              twoway = FALSE, 
+                              weight = "obs", 
+                              npc = NULL, 
+                              m = 2,
+                              silent = TRUE)
 {
   
+  #########################################################################################
+  ## Description: Function that fits multilevel univariate FPCA via FACE method (Cui et al. 2023)
+  ## Definition:  M: total number of sampling points on the two-dimensional functional domain
+  ##              N: number of subjects
+  ##              R_sum: total number of trials
+  ## Args:        see above
+  ## Returns:     A list containing
+  ##                estimated subject- and trial-level eigenvalues
+  ##                estimated subject- and trial-level eigenfunctions
+  ##                estimated overall mean function
+  ##                estimated subject- and trail-level eigenscores
+  ##                prediction for trial-level functional data
+  ##              see '?refund::mfpca.face' for details on other values and explanations
+  ## Note: 1. In line 358-361, overall mean are retrived from input arguments instead of
+  ##          instead of the estimation from one-dimensional smoothing process
+  ##       2. The rest of the function is a direct quote from 'mfpca.face' function from
+  ##          the 'refund' package. See '?refund::mfpca.face' for more details.
+  #########################################################################################    
   
   
   pspline.setting.mfpca <- function(x, knots = 35, p = 3, 
