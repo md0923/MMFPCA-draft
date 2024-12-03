@@ -47,7 +47,7 @@ mmfpca = function(
     R_list[i] = sum(as.numeric(id_array == i))
   }
   R_sum = length(id_array)                             # total number of trials
-  M = dim(z_var1)[2]                                  # total number of sampling points
+  M = dim(z_var1)[2]                                   # total number of sampling points
   
   # estimate the two-dimensional mean function using the bivariate thin plat spline smoother
   z_var1_mean = apply(z_var1, 2, mean)
@@ -270,7 +270,7 @@ mfpca.face_center = function (Y,                    # multilevel univariate func
   ##                estimated subject- and trail-level eigenscores
   ##                prediction for trial-level functional data
   ##              see '?refund::mfpca.face' for details on other values and explanations
-  ## Note: 1. In line 358-361, overall mean are retrived from input arguments instead of
+  ## Note: 1. In line 357-360, overall mean are retrived from input arguments instead of
   ##          instead of the estimation from one-dimensional smoothing process
   ##       2. The rest of the function is a direct quote from 'mfpca.face' function from
   ##          the 'refund' package. See '?refund::mfpca.face' for more details.
@@ -637,6 +637,7 @@ mfpca.face_center = function (Y,                    # multilevel univariate func
 ## 'refund' package implements the face algorithm.
 ## Please see 'help(refund)' for more technical details
 #########################################################################################
+
 face.Cov.mfpca <- function(Y, argvals, A0, B, Anew, Bnew, G_invhalf, s, Cov=FALSE, pve=0.99, npc=NULL, lambda=NULL, alpha=0.7, 
                            search.grid=TRUE, search.length=100, lower=-20, upper=20){
   
