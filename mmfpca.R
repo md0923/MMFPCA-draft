@@ -5,8 +5,7 @@
 ###########################################################################################
 ## Functions included:
 ## Main function:
-##    1. mmfpca: Function that fits multilevel multivariate FPCA utilizing model components 
-##               from multilevel univariate FPCA
+##    1. mmfpca: Function that fits multilevel multivariate FPCA
 ## Supporting functions used by main function:
 ##    1. mfpca.face_center: Function that fits multilevel univariate FPCA using fast covariance
 ##                          estimation (FACE) method (Cui et al. 2023)
