@@ -133,16 +133,14 @@ corr_gen = function(
   for (i in 1:N){
     for (r in 1:R){
       index = R*(i-1) + r
-      # variate 1
-      z_var1[index,] = z_mu_var1 +                            # overall mean function 
-        subject_score[i,] %*% t(eigen_lvl1_var1) +            # subject-specific deviation from mean
-        trial_score[index,] %*% t(eigen_lvl2_var1) +          # trial-specific deviation from subject-mean
-        rnorm(M, sd = sqrt(sigma2_e))                         # independent measurement error
-      # variate 2
-      z_var2[index,] = z_mu_var2 +                            # overall mean function  
-        subject_score[i,] %*% t(eigen_lvl1_var2) +            # subject-specific deviation from mean
-        trial_score[index,] %*% t(eigen_lvl2_var2) +          # trial-specific deviation from subject-mean
-        rnorm(M, sd = sqrt(sigma2_e))                         # independent measurement error
+      z_var1[index,] = z_mu_var1 +                               # overall mean function  
+        subject_score_var1[i,] %*% t(eigen_lvl1_var1) +          # subject-specific deviation from mean
+        trial_score_var1[index,] %*% t(eigen_lvl2_var1) +        # trial-specific deviation from subject mean
+        rnorm(M, sd = sqrt(sigma2_e))                            # independent measurement error 
+      z_var2[index,] = z_mu_var2 +                               # overall mean function   
+        subject_score_var2[i,] %*% t(eigen_lvl1_var2) +          # subject-specific deviation from mean
+        trial_score_var2[index,] %*% t(eigen_lvl2_var2) +        # trial-specific deviation from subject mean
+        rnorm(M, sd = sqrt(sigma2_e))                            # independent measurement error
       # save the subject information for the generated trial
       id_array[index] = i
     }

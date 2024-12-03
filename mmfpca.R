@@ -20,7 +20,7 @@
 mmfpca = function(
     z_var1,                 # multilevel functional data from variate 1 (matrix of dimension M*R_sum)
     z_var2,                 # multilevel functional data from variate 2 (matrix of dimension M*R_sum)
-    id_var,                 # id information for each trial to identify the subject it belong to (array of length R_sum)
+    id_array,               # id information for each trial to identify the subject it belong to (array of length R_sum)
     x_axis,                 # x axis of the two-dimensional functional domain (array of length M_x)
     y_axis,                 # y axis of the two-dimensional functional domain (array of length M_y)
     mufpca_pve,             # percentage of variance explained threshold for multilevel univaraite FPCA (scalar < 1)
@@ -46,8 +46,8 @@ mmfpca = function(
   for (i in 1:N){
     R_list[i] = sum(as.numeric(id_array == i))
   }
-  R_sum = length(id_array).                            # total number of trials
-  M = dim(z_var1)[,2]                                  # total number of sampling points
+  R_sum = length(id_array)                             # total number of trials
+  M = dim(z_var1)[2]                                   # total number of sampling points
   
   # estimate the two-dimensional mean function using the bivariate thin plat spline smoother
   z_var1_mean = apply(z_var1, 2, mean)
@@ -69,7 +69,7 @@ mmfpca = function(
   
   # fit multilevel univariate FPCA for each single variates
   mod_var1 = mfpca.face_center(Y = z_var1,                          # multilevel univariate functional outcome (var1)
-                               id = id_var,                         # subject information for each trial
+                               id = id_array,                         # subject information for each trial
                                argvals = c(1:M),                    # sampling grids on the two-dimensional functional domain
                                p = 4,                               # degree of b-splines used in FACE algorithm
                                pve = mufpca_pve,                    # percentage of variation explained (pve) threshold for multilevel univariate FPCA 
@@ -78,7 +78,7 @@ mmfpca = function(
                                mu = var1_mu_fit)                    # estimated univariate mean function (var1)
   
   mod_var2 = mfpca.face_center(Y = z_var2,                          # multilevel univariate functional outcome (var2)
-                               id = id_var,                         # subject information for each trial
+                               id = id_array,                         # subject information for each trial
                                argvals = c(1:M),                    # sampling grids on the two-dimensional functional domain
                                p = 4,                               # degree of b-splines used in FACE algorithm
                                pve = mufpca_pve,                    # pve threshold for multilevel univariate FPCA (both levels)
@@ -151,9 +151,9 @@ mmfpca = function(
   z_uni_pred_var2 = z_multi_pred_var2 = matrix(nrow = M, ncol = R_sum)
   for (i in 1:N){
     if (i == 1){
-      start = 1
-    }elst{
-      start = sum(1:R_list[i-1])
+      start = 0
+    }else{
+      start = sum(R_list[1:(i-1)])
     }
     for (r in 1:R_list[i]){
       index = start + r
@@ -236,12 +236,45 @@ mmfpca = function(
 
 
 
-mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs", 
-                              argvals = NULL, pve = 0.99, npc = NULL, p = 3, m = 2, knots = 35, 
-                              silent = TRUE, 
-                              mu)           
+mfpca.face_center = function (Y,                    # multilevel univariate functional data (matrix of dimension M*R_sum)       
+                              id,                   # id information for each trial to identify the subject it belong to (array of length R_sum)    
+                              argvals = NULL,       # sampling grids on the two-dimensional functional domain
+                              pve = 0.99,           # pve threshold for multilevel univairate FPCA
+                                                    #     (used to determine number of eigencomponents retained at both levels)
+                              p = 3,                # degree of freedom of b-splines used in FACE algorithm
+                              knots = 35,           # number of knots to use for b-splines
+                              mu,
+                              #####################################################################
+                              ## arguments below and their default values are retianed from the
+                              ## original 'mfpca.face' function from the 'refund' package
+                              ## see '?refund::mfpca.face' for details on explanation of the arguments
+                              #####################################################################
+                              visit = NULL, 
+                              twoway = FALSE, 
+                              weight = "obs", 
+                              npc = NULL, 
+                              m = 2,
+                              silent = TRUE)
 {
   
+  #########################################################################################
+  ## Description: Function that fits multilevel univariate FPCA via FACE method (Cui et al. 2023)
+  ## Definition:  M: total number of sampling points on the two-dimensional functional domain
+  ##              N: number of subjects
+  ##              R_sum: total number of trials
+  ## Args:        see above
+  ## Returns:     A list containing
+  ##                estimated subject- and trial-level eigenvalues
+  ##                estimated subject- and trial-level eigenfunctions
+  ##                estimated overall mean function
+  ##                estimated subject- and trail-level eigenscores
+  ##                prediction for trial-level functional data
+  ##              see '?refund::mfpca.face' for details on other values and explanations
+  ## Note: 1. In line 357-360, overall mean are retrived from input arguments instead of
+  ##          instead of the estimation from one-dimensional smoothing process
+  ##       2. The rest of the function is a direct quote from 'mfpca.face' function from
+  ##          the 'refund' package. See '?refund::mfpca.face' for more details.
+  #########################################################################################    
   
   
   pspline.setting.mfpca <- function(x, knots = 35, p = 3, 
@@ -305,8 +338,7 @@ mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs
   stopifnot(is.matrix(Y))
   if (!is.null(visit)) {
     visit <- as.factor(visit)
-  }
-  else {
+  } else {
     visit <- as.factor(ave(id, id, FUN = seq_along))
   }
   id <- as.factor(id)
@@ -335,8 +367,7 @@ mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs
       ind_j <- which(df$visit == levels(df$visit)[j])
       if (length(ind_j) > 1) {
         meanYj <- colMeans(df$Y[ind_j, ], na.rm = TRUE)
-      }
-      else {
+      } else {
         meanYj <- df$Y[ind_j, ]
       }
       fit_mueta <- gam(meanYj ~ s(argvals))
@@ -346,8 +377,7 @@ mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs
                                                       j], nrow = length(ind_j), ncol = L, byrow = TRUE)
     }
     rm(meanYj, fit_mueta, ind_j, j)
-  }
-  else {
+  } else {
     Ytilde <- df$Y - matrix(mu, nrow = nrow(df$Y), ncol = L, 
                             byrow = TRUE)
   }
@@ -481,20 +511,17 @@ mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs
         A <- Jm * (t(phi1) %*% phi1)
         B <- matrix(rep(t(phi1) %*% phi2, Jm), nrow = npc[[1]])
         temp <- ginv(t(phi2) %*% phi2)
-      }
-      else {
+      } else {
         if (length(evalues[[1]]) == 1) {
           A <- Jm * (t(phi1) %*% phi1)/sigma2 + 1/evalues[[1]]
-        }
-        else {
+        } else {
           A <- Jm * (t(phi1) %*% phi1)/sigma2 + diag(1/evalues[[1]])
         }
         B = matrix(rep(t(phi1) %*% phi2/sigma2, Jm), 
                    nrow = npc[[1]])
         if (length(evalues[[2]]) == 1) {
           temp = ginv(t(phi2) %*% phi2/sigma2 + 1/evalues[[2]])
-        }
-        else {
+        } else {
           temp = ginv(t(phi2) %*% phi2/sigma2 + diag(1/evalues[[2]]))
         }
       }
@@ -538,28 +565,24 @@ mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs
                                eta[, levels(df$visit)[g]])
     }
     rm(YJm, g, ind.visit, ind.Jm)
-  }
-  else {
+  } else {
     for (m in 1:I) {
       Jm <- nVisits[m, 2]
       if (sigma2 < 1e-04) {
         A <- Jm * (t(phi1) %*% phi1)
         B <- matrix(rep(t(phi1) %*% phi2, Jm), nrow = npc[[1]])
         temp <- ginv(t(phi2) %*% phi2)
-      }
-      else {
+      } else {
         if (length(evalues[[1]]) == 1) {
           A <- Jm * (t(phi1) %*% phi1)/sigma2 + 1/evalues[[1]]
-        }
-        else {
+        } else {
           A <- Jm * (t(phi1) %*% phi1)/sigma2 + diag(1/evalues[[1]])
         }
         B = matrix(rep(t(phi1) %*% phi2/sigma2, Jm), 
                    nrow = npc[[1]])
         if (length(evalues[[2]]) == 1) {
           temp = ginv(t(phi2) %*% phi2/sigma2 + 1/evalues[[2]])
-        }
-        else {
+        }  else {
           temp = ginv(t(phi2) %*% phi2/sigma2 + diag(1/evalues[[2]]))
         }
       }
@@ -577,8 +600,7 @@ mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs
         phi2
       if (sigma2 < 1e-04) {
         int <- c(int1, as.vector(t(int2)))
-      }
-      else {
+      } else {
         int <- c(int1, as.vector(t(int2)))/sigma2
       }
       score1[m, ] <- Mat1 %*% int
@@ -605,4 +627,154 @@ mfpca.face_center = function (Y, id, visit = NULL, twoway = FALSE, weight = "obs
      Xhat, Xhat.subject, argvals, diag_Gt, I, ID, J, mu, 
      pve, L, sigma2)
   return(res)
+}
+
+
+
+
+#########################################################################################    
+## The following two functions required by mfpca.face_center are direct quotes from the 
+## 'refund' package implements the face algorithm.
+## Please see 'help(refund)' for more technical details
+#########################################################################################
+
+face.Cov.mfpca <- function(Y, argvals, A0, B, Anew, Bnew, G_invhalf, s, Cov=FALSE, pve=0.99, npc=NULL, lambda=NULL, alpha=0.7, 
+                           search.grid=TRUE, search.length=100, lower=-20, upper=20){
+  
+  ######## precalculation for missing data ########
+  imputation <- FALSE
+  Niter.miss <- 1
+  L <- ncol(Y)
+  n <- nrow(Y)
+  
+  Index.miss <- is.na(Y)
+  if(sum(Index.miss)>0){
+    num.miss <- rowSums(is.na(Y))
+    for(i in 1:n){
+      if(num.miss[i]>0){
+        y <- Y[i,]
+        seq <- (1:L)[!is.na(y)]
+        seq2 <-(1:L)[is.na(y)]
+        t1 <- argvals[seq]
+        t2 <- argvals[seq2]
+        fit <- smooth.spline(t1,y[seq])
+        temp <- predict(fit,t2,all.knots=TRUE)$y
+        if(max(t2)>max(t1)) temp[t2>max(t1)] <- mean(y[seq])
+        if(min(t2)<min(t1)) temp[t2<min(t1)] <- mean(y[seq])
+        Y[i,seq2] <- temp
+      }
+    }
+    imputation <- TRUE
+    Niter.miss <- 100
+  }
+  convergence.vector <- rep(0,Niter.miss)
+  iter.miss <- 1
+  lambda.input <- lambda
+  totalmiss <- mean(Index.miss)
+  
+  
+  while(iter.miss <= Niter.miss&&convergence.vector[iter.miss]==0) {
+    ###################################################
+    ######## Transform the Data           #############
+    ###################################################
+    Ytilde <- t(as.matrix(Y%*%B) %*% A0)
+    C_diag <- rowSums(Ytilde^2)
+    
+    ###################################################
+    ########  Select Smoothing Parameters #############
+    ###################################################
+    Y_square <- sum(Y^2)
+    Ytilde_square <- sum(Ytilde^2)
+    face_gcv <- function(x) {
+      lambda <- exp(x)
+      lambda_s <- (lambda*s)^2/(1 + lambda*s)^2
+      gcv <- sum(C_diag*lambda_s) - Ytilde_square + Y_square
+      trace <- sum(1/(1+lambda*s))
+      gcv <- gcv/(1-alpha*trace/L/(1-totalmiss))^2
+      return(gcv)
+    }
+    
+    
+    if(is.null(lambda.input) && iter.miss<=2) {
+      if(!search.grid){
+        fit <- optim(0,face_gcv,lower=lower,upper=upper)
+        if(fit$convergence>0) {
+          expression <- paste("Smoothing failed! The code is:",fit$convergence)
+          print(expression)
+        }
+        lambda <- exp(fit$par)
+      } else {
+        Lambda <- seq(lower,upper,length=search.length)
+        Length <- length(Lambda)
+        Gcv <- rep(0,Length)
+        for(i in 1:Length)
+          Gcv[i] <- face_gcv(Lambda[i])
+        i0 <- which.min(Gcv)
+        lambda <- exp(Lambda[i0])
+      }
+    }
+    YS <- matrix.multiply.mfpca(Ytilde,1/(1+lambda*s),2)
+    
+    ###################################################
+    ####  Eigendecomposition of Smoothed Data #########
+    ###################################################
+    temp0 <- YS%*%t(YS)/n
+    temp <- as.matrix(Anew%*%as.matrix(temp0%*%t(Anew)))
+    Eigen <- eigen(temp,symmetric=TRUE)
+    A = Eigen$vectors
+    Phi = Bnew %*% A
+    Sigma = Eigen$values
+    
+    if(iter.miss>1&&iter.miss< Niter.miss) {
+      diff <- norm(YS-YS.temp,"F")/norm(YS,"F")
+      if(diff <= 0.02)
+        convergence.vector[iter.miss+1] <- 1
+    }
+    
+    YS.temp <- YS
+    iter.miss <- iter.miss + 1
+    N <- min(n, ncol(B))
+    d <- Sigma[1:N]
+    d <- d[d>0]
+    per <- cumsum(d)/sum(d)
+    N <- ifelse (is.null(npc), min(which(per>pve)), min(npc, length(d)))
+    
+    #########################################
+    #######     Principal  Scores   #########
+    ########   data imputation      #########
+    #########################################
+    if(imputation) {
+      Phi.N <- Phi[,1:N, drop = FALSE]
+      A.N <- G_invhalf %*% A[,1:N]
+      d <- Sigma[1:N]
+      sigmahat2  <-  max(mean(Y[!Index.miss]^2) -sum(Sigma),0)
+      if(N>1){
+        Xi <- solve(t(Phi.N)%*%Phi.N + diag(sigmahat2/d)) %*% t(as.matrix(Y%*%B) %*% A.N)
+      } else{
+        Xi <- solve(t(Phi.N)%*%Phi.N + sigmahat2/d) %*% t(as.matrix(Y%*%B) %*% A.N)
+      }
+      Yhat <- t(Phi.N %*% Xi)
+      Y <- Y*(1-Index.miss) + Yhat*Index.miss
+      if(sum(is.na(Y))>0) print("error")
+    }
+    
+  } ## end of while loop
+  
+  Phi.N <- Phi[,1:N, drop = FALSE]
+  evalues <- Sigma[1:N]
+  Ktilde <- NULL
+  if(Cov) {
+    Ktilde <- Phi.N %*%  matrix.multiply.mfpca(t(Phi.N),evalues,2)
+  }
+  
+  return(list(Yhat=Y, decom=temp, Ktilde=Ktilde, evalues=evalues, efunctions=Phi.N))
+}
+
+
+
+matrix.multiply.mfpca <- function(A,s,option=1){
+  if(option==2)
+    return(A*(s%*%t(rep(1,dim(A)[2]))))
+  if(option==1)
+    return(A*(rep(1,dim(A)[1])%*%t(s)))
 }
